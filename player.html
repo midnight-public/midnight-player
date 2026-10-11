@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #player { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="player"></div>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+  let player = null, ready = false, queue = [], current = null;
+
+  function onYouTubeIframeAPIReady() {
+    player = new YT.Player('player', {
+      width: '100%',
+      height: '100%',
+      playerVars: {
+        autoplay: 1, controls: 0, disablekb: 1, fs: 0,
+        modestbranding: 1, rel: 0, iv_load_policy: 3, playsinline: 1
+      },
+      events: {
+        onReady: function () {
+          ready = true;
+          queue.forEach(apply);
+          queue = [];
+        }
+      }
+    });
+  }
+
+  window.addEventListener('message', function (e) {
+    const m = e.data;
+    if (!m || !m.action) return;
+    ready ? apply(m) : queue.push(m);
+  });
+
+  function apply(m) {
+    if (m.action === 'stop') {
+      if (current) { player.stopVideo(); current = null; }
+      return;
+    }
+
+    if (m.action === 'volume') {
+      player.setVolume(m.volume);
+      return;
+    }
+
+    if (m.action !== 'state') return;
+
+    if (m.videoId !== current) {
+      current = m.videoId;
+      player.loadVideoById({
+        videoId: m.videoId,
+        startSeconds: Math.max(0, m.time),
+        suggestedQuality: 'hd1080'
+      });
+    } else {
+      const d = player.getDuration();
+      if (d > 0 && m.time > d + 1) { player.pauseVideo(); return; }
+      const drift = Math.abs(player.getCurrentTime() - m.time);
+      if (drift > (m.paused ? 0.5 : 2.5)) player.seekTo(m.time, true);
+    }
+
+    player.setVolume(m.volume);
+    m.paused ? player.pauseVideo() : player.playVideo();
+  }
+</script>
+</body>
+</html>
